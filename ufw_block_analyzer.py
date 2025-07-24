@@ -9,26 +9,85 @@ them into a dictionary with title case keys.
 Created with assistance from aider.chat
 """
 
+import json
 import re
 import subprocess
 import sys
 from typing import Dict, Optional
 
+import click
+import rtoml
 from loguru import logger
 
 
-def parse_ufw_block_line(line: str) -> Optional[Dict[str, str]]:
+def get_docker_networks() -> Dict[str, Dict[str, str]]:
     """
-    Parse a UFW BLOCK log line and extract key=value pairs.
+    Get Docker network information using 'docker network ls --format json'.
+    
+    Returns a dictionary mapping network ID prefixes to network metadata
+    including project names extracted from Docker Compose labels.
+    
+    Returns
+    -------
+    Dict[str, Dict[str, str]]
+        Dictionary mapping network ID prefixes to network info
+    """
+    try:
+        result = subprocess.run(
+            ["sudo", "docker", "network", "ls", "--format", "json"],
+            capture_output=True,
+            text=True,
+            check=True
+        )
+        
+        networks = {}
+        for line in result.stdout.strip().split('\n'):
+            if line:
+                network = json.loads(line)
+                network_id = network.get('ID', '')
+                # Use first 12 characters of network ID for matching
+                network_prefix = network_id[:12]
+                
+                # Extract project name from Docker Compose labels
+                labels = network.get('Labels', '')
+                project_name = 'unknown'
+                if labels:
+                    for label in labels.split(','):
+                        if label.startswith('com.docker.compose.project='):
+                            project_name = label.split('=', 1)[1]
+                            break
+                
+                networks[network_prefix] = {
+                    'name': network.get('Name', 'unknown'),
+                    'project': project_name,
+                    'id': network_id
+                }
+        
+        logger.info(f"Loaded {len(networks)} Docker networks")
+        return networks
+        
+    except subprocess.CalledProcessError as e:
+        logger.error(f"Failed to get Docker networks: {e}")
+        return {}
+    except Exception as e:
+        logger.error(f"Error parsing Docker networks: {e}")
+        return {}
+
+
+def parse_ufw_block_line(line: str, docker_networks: Dict[str, Dict[str, str]]) -> Optional[Dict[str, str]]:
+    """
+    Parse a UFW BLOCK log line and extract key=value pairs with Docker network info.
 
     Uses regex to find all KEY=VALUE patterns in the line and converts
-    keys to title case. This approach handles the variable structure
-    of UFW log entries where some fields may be missing or have empty values.
+    keys to title case. Matches interface names to Docker networks and
+    adds project information. Removes unnecessary technical fields.
 
     Parameters
     ----------
     line : str
         The UFW BLOCK log line to parse
+    docker_networks : Dict[str, Dict[str, str]]
+        Dictionary mapping network ID prefixes to network metadata
 
     Returns
     -------
@@ -40,10 +99,7 @@ def parse_ufw_block_line(line: str) -> Optional[Dict[str, str]]:
         return None
 
     # Regex pattern to match KEY=VALUE pairs
-    # This captures alphanumeric keys followed by = and values that can contain
-    # various characters including colons, dots, slashes, etc.
     pattern = r"([A-Z]+)=([^\s]*)"
-
     matches = re.findall(pattern, line)
 
     if not matches:
@@ -51,31 +107,53 @@ def parse_ufw_block_line(line: str) -> Optional[Dict[str, str]]:
         return None
 
     # Convert to dictionary with title case keys
-    # Title case is used to make the output more readable while preserving
-    # the original structure of the UFW log format
     parsed_data = {}
     for key, value in matches:
         parsed_data[key.title()] = value
 
+    # Match interface to Docker network and add project info
+    interface = parsed_data.get('In') or parsed_data.get('Out', '')
+    if interface.startswith('br-'):
+        network_id = interface[3:]  # Remove 'br-' prefix
+        for net_prefix, net_info in docker_networks.items():
+            if network_id.startswith(net_prefix):
+                parsed_data['DockerProject'] = net_info['project']
+                parsed_data['DockerNetwork'] = net_info['name']
+                break
+        else:
+            parsed_data['DockerProject'] = 'unknown'
+            parsed_data['DockerNetwork'] = 'unknown'
+
+    # Remove unwanted technical fields
+    keys_to_remove = ['Len', 'Tos', 'Prec', 'Id']
+    for key in keys_to_remove:
+        parsed_data.pop(key, None)
+
     return parsed_data
 
 
-def run_ufw_monitor() -> None:
+def run_ufw_monitor(verbose: bool, docker_networks: Dict[str, Dict[str, str]]) -> None:
     """
     Continuously monitor journalctl for UFW BLOCK messages.
 
-    Uses subprocess.Popen to run journalctl -f piped through grep to filter
-    for UFW BLOCK messages. This approach allows real-time processing of
-    log entries as they appear in the system journal.
+    Uses subprocess.Popen to run journalctl -f to monitor UFW BLOCK messages.
+    Enriches each blocked connection with Docker network information.
+
+    Parameters
+    ----------
+    verbose : bool
+        Whether to print captured lines
+    docker_networks : Dict[str, Dict[str, str]]
+        Dictionary mapping network ID prefixes to network metadata
     """
     logger.info("Starting UFW block analyzer...")
     logger.info("Monitoring journalctl for UFW BLOCK messages...")
 
     try:
-        # Run journalctl -f | grep 'UFW BLOCK'
+        # Run journalctl -f
         # We use shell=True here to easily chain the commands with pipe
         process = subprocess.Popen(
-            "journalctl -f | grep 'UFW BLOCK'",
+            "journalctl -f",
             shell=True,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
@@ -88,10 +166,13 @@ def run_ufw_monitor() -> None:
         # Process each line as it comes in
         for line in iter(process.stdout.readline, ""):
             if line:
-                parsed_data = parse_ufw_block_line(line.strip())
+                if verbose:
+                    print(f"Captured line: {line.strip()}")
+                
+                parsed_data = parse_ufw_block_line(line.strip(), docker_networks)
                 if parsed_data:
-                    logger.info(f"UFW Block detected: {parsed_data}")
-                    print(f"Parsed UFW Block: {parsed_data}")
+                    formatted_output = rtoml.dumps(parsed_data)
+                    logger.info(f"UFW Block detected:\n{formatted_output}")
 
     except KeyboardInterrupt:
         logger.info("Received interrupt signal, stopping monitor...")
@@ -104,9 +185,19 @@ def run_ufw_monitor() -> None:
         sys.exit(1)
 
 
-if __name__ == "__main__":
+@click.command()
+@click.option('--verbose', is_flag=True, help='Print captured lines')
+def main(verbose: bool) -> None:
+    """UFW Block Analyzer - Monitor and analyze UFW BLOCK messages with Docker context."""
     # Configure loguru to output to stderr so it doesn't interfere with data output
     logger.remove()
     logger.add(sys.stderr, level="INFO")
+    
+    # Get Docker networks once at startup
+    docker_networks = get_docker_networks()
+    
+    run_ufw_monitor(verbose=verbose, docker_networks=docker_networks)
 
-    run_ufw_monitor()
+
+if __name__ == "__main__":
+    main()
