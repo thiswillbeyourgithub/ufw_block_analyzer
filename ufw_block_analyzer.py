@@ -81,7 +81,7 @@ def parse_ufw_block_line(
     Parse a UFW BLOCK log line and extract key=value pairs with Docker network info.
 
     Uses regex to find all KEY=VALUE patterns in the line and converts
-    keys to title case. Matches interface names to Docker networks and
+    keys to lowercase. Matches interface names to Docker networks and
     adds project information. Removes unnecessary technical fields.
 
     Parameters
@@ -94,7 +94,7 @@ def parse_ufw_block_line(
     Returns
     -------
     Dict[str, str] or None
-        Dictionary with title case keys and string values, or None if no UFW BLOCK found
+        Dictionary with lowercase keys and string values, or None if no UFW BLOCK found
     """
     # Only process lines that contain UFW BLOCK
     if "[UFW BLOCK]" not in line:
@@ -108,13 +108,13 @@ def parse_ufw_block_line(
         logger.warning(f"No key=value pairs found in line: {line.strip()}")
         return None
 
-    # Convert to dictionary with title case keys
+    # Convert to dictionary with lowercase keys
     parsed_data = {}
     for key, value in matches:
-        parsed_data[key.title()] = value
+        parsed_data[key.lower()] = value
 
     # Match interface to Docker network and add project info
-    interface = parsed_data.get("In") or parsed_data.get("Out", "")
+    interface = parsed_data.get("in") or parsed_data.get("out", "")
     if interface.startswith("br-"):
         network_id = interface[3:]  # Remove 'br-' prefix
         for net_prefix, net_info in docker_networks.items():
@@ -127,7 +127,7 @@ def parse_ufw_block_line(
             parsed_data["DockerNetwork"] = "unknown"
 
     # Remove unwanted technical fields
-    keys_to_remove = ["Len", "Tos", "Prec", "Id", "Ttl", "Window", "Res", "Urgp"]
+    keys_to_remove = ["len", "tos", "prec", "id", "ttl", "window", "res", "urgp"]
     for key in keys_to_remove:
         parsed_data.pop(key, None)
 
