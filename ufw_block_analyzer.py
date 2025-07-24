@@ -127,7 +127,7 @@ def parse_ufw_block_line(
             parsed_data["DockerNetwork"] = "unknown"
 
     # Remove unwanted technical fields
-    keys_to_remove = ["Len", "Tos", "Prec", "Id"]
+    keys_to_remove = ["Len", "Tos", "Prec", "Id", "Ttl", "Window", "Res", "Urgp"]
     for key in keys_to_remove:
         parsed_data.pop(key, None)
 
