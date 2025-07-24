@@ -205,7 +205,7 @@ def main(verbose: bool) -> None:
     # Configure loguru to output to stderr so it doesn't interfere with data output
     logger.remove()
     logger.add(sys.stderr, level="INFO")
-    
+
     # Add DEBUG level logging to a file next to the script
     script_dir = Path(__file__).parent
     log_file = script_dir / "ufw_block_analyzer.log"
