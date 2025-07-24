@@ -157,7 +157,3 @@ The code uses:
 - Comprehensive docstrings in NumPy style
 - Keyword arguments preferred over positional arguments
 - Robust error handling and logging
-
-## License
-
-[Add your preferred license here]
