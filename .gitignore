@@ -2,3 +2,4 @@
 .aider*
 **pycache**
 **egg-info
+*.log
