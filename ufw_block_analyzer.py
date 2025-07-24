@@ -183,7 +183,7 @@ def run_ufw_monitor(verbose: bool, docker_networks: Dict[str, Dict[str, str]]) -
                 if parsed_data:
                     formatted_output = rtoml.dumps(parsed_data)
                     # Strip quotation marks from the TOML output
-                    formatted_output = formatted_output.replace('"', '')
+                    formatted_output = formatted_output.replace('"', "")
                     logger.info(f"UFW Block detected:\n{formatted_output}")
 
     except KeyboardInterrupt:
