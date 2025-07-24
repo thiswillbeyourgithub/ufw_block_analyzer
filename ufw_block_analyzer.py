@@ -117,8 +117,8 @@ def parse_ufw_block_line(
     interface = parsed_data.get("in") or parsed_data.get("out", "")
 
     # Initialize Docker fields for all interfaces to ensure consistency
-    parsed_data["DockerProject"] = "not_docker"
-    parsed_data["DockerNetwork"] = "not_docker"
+    parsed_data["docker_project"] = "not_docker"
+    parsed_data["docker_network"] = "not_docker"
 
     # Only process Docker bridge interfaces (br-*)
     if interface and interface.startswith("br-"):
@@ -126,13 +126,13 @@ def parse_ufw_block_line(
         # Search for matching Docker network
         for net_prefix, net_info in docker_networks.items():
             if network_id.startswith(net_prefix):
-                parsed_data["DockerProject"] = net_info["project"]
-                parsed_data["DockerNetwork"] = net_info["name"]
+                parsed_data["docker_project"] = net_info["project"]
+                parsed_data["docker_network"] = net_info["name"]
                 break
         else:
             # Docker bridge interface but no matching network found
-            parsed_data["DockerProject"] = "unknown"
-            parsed_data["DockerNetwork"] = "unknown"
+            parsed_data["docker_project"] = "unknown"
+            parsed_data["docker_network"] = "unknown"
 
     # Remove unwanted technical fields
     keys_to_remove = ["len", "tos", "prec", "id", "ttl", "window", "res", "urgp"]
