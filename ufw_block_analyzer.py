@@ -115,11 +115,11 @@ def parse_ufw_block_line(
 
     # Match interface to Docker network and add project info
     interface = parsed_data.get("in") or parsed_data.get("out", "")
-    
+
     # Initialize Docker fields for all interfaces to ensure consistency
     parsed_data["DockerProject"] = "not_docker"
     parsed_data["DockerNetwork"] = "not_docker"
-    
+
     # Only process Docker bridge interfaces (br-*)
     if interface and interface.startswith("br-"):
         network_id = interface[3:]  # Remove 'br-' prefix
