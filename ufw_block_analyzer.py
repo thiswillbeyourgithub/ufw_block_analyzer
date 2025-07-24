@@ -13,6 +13,7 @@ import json
 import re
 import subprocess
 import sys
+from pathlib import Path
 from typing import Dict, Optional
 
 import click
@@ -204,6 +205,11 @@ def main(verbose: bool) -> None:
     # Configure loguru to output to stderr so it doesn't interfere with data output
     logger.remove()
     logger.add(sys.stderr, level="INFO")
+    
+    # Add DEBUG level logging to a file next to the script
+    script_dir = Path(__file__).parent
+    log_file = script_dir / "ufw_block_analyzer.log"
+    logger.add(log_file, level="DEBUG", rotation="10 MB", retention="7 days")
 
     # Get Docker networks once at startup
     docker_networks = get_docker_networks()
