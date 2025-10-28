@@ -203,7 +203,7 @@ def run_ufw_monitor(verbose: bool, docker_networks: Dict[str, Dict[str, str]]) -
 def main(verbose: bool) -> None:
     """UFW Block Analyzer - Monitor and analyze UFW BLOCK messages with Docker context."""
     # Configure loguru to output to stderr so it doesn't interfere with data output
-    logger.remove()
+    # logger.remove()
     logger.add(sys.stderr, level="INFO")
 
     # Add DEBUG level logging to a file next to the script
